@@ -43,3 +43,4 @@ BigBird 可以由三部分组成：Random Attention + Window Attention + Global 
 ## References
 
 - 为节约而生：从标准Attention到稀疏Attention, https://spaces.ac.cn/archives/6853#Sparse%20Self%20Attention
+-  Big Bird: Transformers for Longer Sequences, https://arxiv.org/abs/2007.14062
