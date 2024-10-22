@@ -40,7 +40,55 @@ BigBird 所关注的问题：
 
 BigBird 可以由三部分组成：Random Attention + Window Attention + Global Attention。
 
+对于 Global Attention，每一个 query 都和其他所有 tokens 关联，并且也被其他所有 tokens 关联。
+
+```
+# pseudo code
+
+Q -> Query martix (seq_length, head_dim)
+K -> Key matrix (seq_length, head_dim)
+
+# 1st & last token attends all other tokens
+Q[0] x [K[0], K[1], K[2], ......, K[n-1]]
+Q[n-1] x [K[0], K[1], K[2], ......, K[n-1]]
+
+# 1st & last token getting attended by all other tokens
+K[0] x [Q[0], Q[1], Q[2], ......, Q[n-1]]
+K[n-1] x [Q[0], Q[1], Q[2], ......, Q[n-1]]
+
+```
+
+对于 Sliding Attention，关键词元被拷贝两次，向右拷贝一次，向左拷贝一次，计算复杂度为 $ O(3 \times n) $。
+
+```
+# what we want to do
+Q[i] x [K[i-1], K[i], K[i+1]] for i = 1:-1
+
+# efficient implementation in code (assume dot product multiplication 👇)
+[Q[0], Q[1], Q[2], ......, Q[n-2], Q[n-1]] x [K[1], K[2], K[3], ......, K[n-1], K[0]]
+[Q[0], Q[1], Q[2], ......, Q[n-1]] x [K[n-1], K[0], K[1], ......, K[n-2]]
+[Q[0], Q[1], Q[2], ......, Q[n-1]] x [K[0], K[1], K[2], ......, K[n-1]]
+
+# Each sequence is getting multiplied by only 3 sequences to keep `window_size = 3`.
+# Some computations might be missing; this is just a rough idea.
+```
+
+每个查询标记会关注一些随机标记，对于实际实现，这意味着模型会随机收集一些标记并计算它们的注意力分数。
+
+```
+# r1, r2, r are some random indices; Note: r1, r2, r3 are different for each row 👇
+Q[1] x [Q[r1], Q[r2], ......, Q[r]]
+.
+.
+.
+Q[n-2] x [Q[r1], Q[r2], ......, Q[r]]
+
+# leaving 0th & (n-1)th token since they are already global
+
+```
+
 ## References
 
 - 为节约而生：从标准Attention到稀疏Attention, https://spaces.ac.cn/archives/6853#Sparse%20Self%20Attention
 -  Big Bird: Transformers for Longer Sequences, https://arxiv.org/abs/2007.14062
+- Understanding BigBird's Block Sparse Attention, https://huggingface.co/blog/big-bird
