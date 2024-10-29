@@ -25,3 +25,28 @@ Flash Decoding 主要包含以下三个步骤：
 - 对所有输出 blocks 进行 reduction 得到最终输出，需要用 log-sum-exp 来重新调整每个块的贡献。
 
 实际应用中第一步不设计 GPU 操作，需要对第 2 步第 3 步执行单独 kernels。最终的 reduction 会引入一些额外的计算，但总体上 Flash-Decoding 通过增加并行化的方式取得了更高的效率。
+
+在 flashdecoding split kv 后需要按照 LSE 对不同的结果进行 rescale:
+
+```python
+        # This loop should be mapped to different blocks for parallel execution.
+        for n in range(loop_n):
+            k = ks[n]
+            v = vs[n]
+            
+            output, lse = self.flash_attn_split_kv(q, k, v)
+            
+            # Compute the actual output by reducing over all the splits, using the log-sum-exp to scale the contribution of each split.
+            
+            new_max_logic = torch.max(max_logic, lse)
+            
+            old_scale = torch.exp(max_logic - new_max_logic)
+            acc *= old_scale
+            
+            exp_logic = torch.exp(lse - new_max_logic)
+            acc += exp_logic * output
+            sum_exp = sum_exp * old_scale + exp_logic
+            max_logic = new_max_logic
+            
+        return acc / sum_exp
+```
