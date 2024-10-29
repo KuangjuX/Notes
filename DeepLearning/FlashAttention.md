@@ -75,3 +75,42 @@ $$
 - 减少大量非矩阵乘的冗余计算，增加 Tensor Core 的计算比例
 - forward pass/backward pass 均增加 seqlen 维度的并行，forward pass 交替 Q，K，V 循环顺序
 - 更好的 Warp Partitioning 策略，避免 Split-K
+
+在 Tri Dao 的 FlashAttention 的 [Triton 实现](https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/flash_attn_triton.py)中，使用了 LSE(LogSumExp) 来做 smooth maximum。
+
+$$
+softmax = \frac{exp(x_i - c)}{\sum_i exp(x_i -c)} \\ 
+c = max(x_1,...,x_n)
+$$
+
+
+LSE 可以被用于作为 approximation of max。
+
+$$
+LSE(x_1, ..., x_n) = log(exp(x_1)+...+exp(x_n)) \\ 
+= c + log \sum_n exp(x_i - c) \\
+c = max(x_1,...,x_n)
+$$
+
+Triton 中的算法可以被描述为:
+
+![](FlashAttention/triton_flash_attn.png)
+
+等式 $(2)$ 中 `lse_i` 被用于作为最大值的一个近似。
+
+在等式 $(9)$ 中：
+
+$$
+exp(lse_i - m_{ij}) = exp(c_{old} + log \sum_n exp(x_i - c_{old}) - c_{new}) + l_{ij} \\ 
+= exp((c_{old} - c_{new} + log \sum_n exp(x_i - c_{old}))) \\
+= exp(c_{old} - c_{new})\sum_n exp(x_i - c_{old})
+$$
+
+在等式 $(11)$ 中的 `o_scale` 作为 softmax 函数的分母：
+
+$$
+m_i - lse_i = exp(c - c - log \sum_n exp(x_i - c)) \\
+= exp(-log \sum_n exp(x_i - c)) \\ 
+= exp(log \frac{1}{\sum_n exp(x_i - c)}) \\ 
+= \frac{1}{\sum_n exp(x_i - c)}
+$$
